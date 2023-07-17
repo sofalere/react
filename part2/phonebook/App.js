@@ -1,10 +1,30 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
+import personsService from './services/persons'
 
-const Contacts = ({contacts}) => {
+const Contacts = ({contacts, deleteHandler}) => {
   return (
     <div>
-      {contacts.map((contact) => <p key={contact.id}>{contact.name}: {contact.number}</p>)}
+      {contacts.map(contact => {
+        return (
+          <p key={contact.id}>{contact.name}: {contact.number}
+            <button 
+              onClick={() => deleteHandler(contact.id)}>Delete
+            </button>
+          </p>
+        )
+      })}
+    </div>
+  )
+}
+
+const Notification = ({message}) => {
+  if (message === null) {
+    return null
+  }
+
+  return (
+    <div className={message.className}>
+      {message.text}
     </div>
   )
 }
@@ -47,16 +67,24 @@ const App = () => {
   const [newName, setNewName] = useState('');
   const [newNumber, setNewNumber] = useState('');
   const [newFilter, setNewFilter] = useState('');
+  const [message, setMessage] = useState({});
 
   useEffect(() => {
-    console.log('effect')
-    axios
-      .get('http://localhost:3001/persons')
-      .then(response => {
-        console.log('promise fulfilled');
-        setPersons(response.data);
-      })
+    personsService
+      .getAll()
+      .then(returnedPersons => setPersons(returnedPersons))
   }, [])
+
+  function changeMessage(text, className) {
+    setMessage({
+      text,
+      className,
+    });
+
+    setTimeout(() => {
+      setMessage(null)
+    }, 5000)
+  }
 
   const personsToShow = newFilter === '' ? persons : 
     persons.filter(person => person.name.toLowerCase().includes(newFilter.toLowerCase()));
@@ -75,7 +103,17 @@ const App = () => {
     if (Object.values(persons).includes(newName)) {
       window.alert(`${newName} is already added to phonebook`);
     } else {
-      setPersons([...persons].concat({name: newName, number: newNumber, id: persons.length + 1}));
+      const newPerson = {name: newName, number: newNumber, id: persons.length + 1};
+
+      personsService
+        .create(newPerson)
+        .then(returnedPerson => {
+          setPersons([...persons].concat(returnedPerson));
+          changeMessage(`Successfully added ${returnedPerson.name}`, 'success');
+        })
+        .catch(error => {
+          changeMessage(`An error occured: ${error}`, 'error');
+        })
     }
     setNewName('');
     setNewNumber('');
@@ -85,8 +123,22 @@ const App = () => {
     setNewFilter(e.target.value);
   };
 
+  const deleteHandler = (id) => {
+    if (window.confirm('Do you really want to delete this person?')) {
+      const person = persons.filter(person => person.id === id)[0]
+      personsService
+        .remove(id)
+        .then( _ => {
+          const newPersons = persons.filter(person => person.id !== id);
+          setPersons(newPersons);
+          changeMessage(`Successfully deleted ${person.name}`, 'success');
+        });
+    }
+  };
+
   return (
     <div>
+      <Notification message={message}/>
       <h2>Phonebook</h2>
         <Filter newFilter={newFilter} filterHandler={filterHandler}/>
       <h2>Add a new</h2>
@@ -97,7 +149,10 @@ const App = () => {
         newNumber={newNumber}
         numberInputHandler={numberInputHandler}/>
       <h2>Numbers</h2>
-      <Contacts contacts={personsToShow}/>
+      <Contacts 
+        contacts={personsToShow}
+        deleteHandler={deleteHandler}
+      />
     </div>
   )
 }
